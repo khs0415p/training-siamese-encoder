@@ -6,7 +6,7 @@ from collections import OrderedDict
 from transformers import PreTrainedModel, AutoTokenizer
 from utils import LOGGER, seed_worker
 from utils.data_utils import CustomDataset
-from torch.utils.data import DataLoader, random_split, distributed, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, random_split, distributed, WeightedRandomSampler, SequentialSampler
 
 
 IGNORE_ID = -100
@@ -37,37 +37,40 @@ def collate_fn_warpper(padding_id, model_type):
 
 
 def collate_fn(batch: List[Dict[str, torch.Tensor]], padding_value: int = 0, model_type: str = '') -> Dict[str, torch.Tensor]:
+    dataset_keys = ['premise', 'hypothesis']
     if any([model_name in model_type for model_name in ['roberta', 'distilbert']]):
-        input_keys = ("input_ids", "labels")
+        input_keys = ("input_ids", "attention_mask")
     else:
-        input_keys = ("input_ids", "token_type_ids", "labels")
+        input_keys = ("input_ids", "token_type_ids", "attention_mask")
 
-    outputs = {key: [instance[key] for instance in batch] for key in input_keys}
+    def pad_and_create_mask(input_ids: List[torch.Tensor], attention_mask: List[torch.Tensor], padding_value: int) -> Dict[str, torch.Tensor]:
+        input_ids = torch.nn.utils.rnn.pad_sequence(input_ids, batch_first=True, padding_value=padding_value)
+        attention_mask = torch.nn.utils.rnn.pad_sequence(attention_mask, batch_first=True, padding_value=padding_value)
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask
+        }
 
-    # Dynamic padding
-    input_ids = torch.nn.utils.rnn.pad_sequence(
-        outputs["input_ids"], batch_first=True, padding_value=padding_value
-        )
-
-    attention_mask = input_ids.ne(padding_value).long()
+    outputs = {}
+    for key in dataset_keys:
+        collected_data = {item_key: [instance[key][item_key] for instance in batch] for item_key in input_keys}
+        result = pad_and_create_mask(collected_data["input_ids"], collected_data["attention_mask"], padding_value)
+        if "token_type_ids" in collected_data:
+            result["token_type_ids"] = torch.nn.utils.rnn.pad_sequence(
+                collected_data['token_type_ids'], batch_first=True, padding_value=padding_value
+            )
+        
+        outputs[key] = result
     
-    result = {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "labels": torch.stack(outputs["labels"], dim=0)
-    }
-
-    if "token_type_ids" in outputs:
-        token_type_ids = torch.nn.utils.rnn.pad_sequence(
-            outputs['token_type_ids'], batch_first=True, padding_value=padding_value
-        )
-        result['token_type_ids'] = token_type_ids
-
-    return result
+    labels = [instance['labels'] for instance in batch]
+    outputs['labels'] = torch.stack(labels, dim=0)
+    return outputs
 
 
 def build_dataloader(dataset, batch_size, num_workers, shuffle, model_type, ddp=False, pad_token_id=0):
-    sampler = distributed.DistributedSampler(dataset, shuffle=shuffle) if ddp else RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
+    weights = (1 / dataset.data['label'].map(dataset.data['label'].value_counts(normalize=True))).values
+
+    sampler = distributed.DistributedSampler(dataset, shuffle=shuffle) if ddp else WeightedRandomSampler(weights=weights, num_samples=len(dataset)) if shuffle else SequentialSampler(dataset)
     return DataLoader(
             dataset,
             batch_size=batch_size,
