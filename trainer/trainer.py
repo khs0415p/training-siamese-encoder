@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import BaseTrainer
+from utils import LOGGER
 from utils.train_utils import get_dataloader, get_test_dataloader
 from transformers import AutoTokenizer
 
@@ -31,17 +32,57 @@ class Trainer(BaseTrainer):
         # initialize trainer
         self._init_trainer()
 
-        # criterion
+        # classification objective
         self.cross_entropy = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
 
+        # regression objective
+        self.cos_sim = nn.CosineSimilarity()
+        self.mse_loss = nn.MSELoss()
 
-    def focal_loss(self, loss):
+        # triplet objective
+        self.triplet_loss = nn.TripletMarginLoss(margin=self.config.margin)
+    
+    def _make_target(self, labels):
+        targets = torch.ones_like(labels.squeeze(), dtype=torch.float, device=labels.device)
+        targets[labels.squeeze() == 1] = 0
+        targets[labels.squeeze() == 2] = -1
 
-        pt = torch.exp(-loss)
-        focal_loss = self.config.alpha * (1-pt)**self.config.gamma * loss
-        focal_loss = torch.mean(focal_loss)
-        return focal_loss
+        return targets
+    
+    def _get_triplet_loss(self, premise, hypothesis, labels):
+        positive_make = labels == 0
+        negative_make = labels == 2
 
+        positive_indices = positive_make.nonzero(as_tuple=True)[0]
+        negative_indices = negative_make.nonzero(as_tuple=True)[0]
+
+        if len(positive_indices) == 0 or len(negative_indices) == 0:
+            LOGGER.info("Not enough positive or negative samples found.")
+            return None
+        
+        anchor_embeddings = []
+        positive_embeddings = []
+        negative_embeddings = []
+
+        for i in range(len(positive_indices)):
+            anchor_idx = positive_indices[i]
+
+            anchor = premise[anchor_idx]
+            positive = hypothesis[anchor_idx]
+
+            negative_idx = negative_indices[i % len(negative_indices)]
+            negative = hypothesis[negative_idx]
+
+            anchor_embeddings.append(anchor)
+            positive_embeddings.append(positive)
+            negative_embeddings.append(negative)
+
+        anchors = torch.stack(anchor_embeddings)
+        positives = torch.stack(positive_embeddings)
+        negatives = torch.stack(negative_embeddings)
+
+        loss = self.triplet_loss(anchors, positives, negatives)
+        return loss
 
     def _training_step(self, model_inputs):
         """
@@ -50,20 +91,27 @@ class Trainer(BaseTrainer):
         Return:
             (Tensor loss): loss
         """        
-        
-        output = self.model(
-            input_ids=model_inputs['input_ids'],    # batch, seq
-            attention_mask=model_inputs['attention_mask'],
-            token_type_ids=model_inputs['token_type_ids'] if 'token_type_ids' in model_inputs else None
-        )
-        
-        logits = output.logits # batch, num_labels
-        loss = self.cross_entropy(logits.view(-1, self.config.num_labels), model_inputs['labels'].view(-1))
-        loss = self.focal_loss(loss)
+        labels = model_inputs['labels']
+
+        output = self.model(**model_inputs, return_logit=True)
+        (premise_output, hypothesis_output), logit = output['pooled_outputs'], output['logit']
+
+        classification_loss = self.cross_entropy(logit.view(-1, self.config.num_labels), labels.view(-1))
+
+        cosine_similarity = self.cos_sim(premise_output, hypothesis_output)
+        targets = self._make_target(labels)
+        cosine_loss = self.mse_loss(cosine_similarity, targets)
+
+        triplet_loss = self._get_triplet_loss(premise_output, hypothesis_output, labels)
+
+        if triplet_loss is None:
+            loss = (classification_loss + cosine_loss) / 2
+        else:
+            loss = (classification_loss + cosine_loss + triplet_loss) / 3
 
         self._backward_step(loss)
 
-        return loss.item()
+        return loss.item(), classification_loss.item(), cosine_loss.item(), None if triplet_loss is None else triplet_loss.item()
 
 
     @torch.no_grad()
@@ -73,34 +121,36 @@ class Trainer(BaseTrainer):
             model_inputs: data of batch
         Return:
             (Tensor loss): loss
-        """
-        output = self.model(
-            input_ids=model_inputs['input_ids'],    # batch, seq
-            attention_mask=model_inputs['attention_mask'],
-            token_type_ids=model_inputs['token_type_ids'] if 'token_type_ids' in model_inputs else None
-        )
-        
-        logits = output.logits # batch, num_labels
-        loss = self.cross_entropy(logits.view(-1, self.config.num_labels), model_inputs['labels'].view(-1))
-        loss = self.focal_loss(loss)
+        """        
+        labels = model_inputs['labels']
 
-        outputs = torch.argmax(logits.detach().cpu(), dim=-1)
-        acc = torch.sum(outputs == model_inputs['labels'].detach().cpu().squeeze()) / logits.size(0)
+        output = self.model(**model_inputs, return_logit=True)
+        (premise_output, hypothesis_output), logit = output['pooled_outputs'], output['logit']
 
-        return loss.item(), acc.item(), logits
+        classification_loss = self.cross_entropy(logit.view(-1, self.config.num_labels), labels.view(-1))
+
+        cosine_similarity = self.cos_sim(premise_output, hypothesis_output)
+        targets = self._make_target(labels)
+        cosine_loss = self.mse_loss(cosine_similarity, targets)
+
+        triplet_loss = self._get_triplet_loss(premise_output, hypothesis_output, labels)
+
+        if triplet_loss is None:
+            loss = (classification_loss + cosine_loss) / 2
+        else:
+            loss = (classification_loss + cosine_loss + triplet_loss) / 3
+
+        outputs = torch.argmax(logit.detach().cpu(), dim=-1)
+        acc = torch.sum(outputs == labels.detach().cpu().squeeze()) / logit.size(0)
+    
+        return loss.item(), classification_loss.item(), cosine_loss.item(), None if triplet_loss is None else triplet_loss.item(), acc.item()
 
     @torch.no_grad()
     def _test_step(self, model_inputs):
+        labels = model_inputs['labels']
 
-        output = self.model(
-            input_ids=model_inputs['input_ids'],    # batch, seq
-            attention_mask=model_inputs['attention_mask'],
-            token_type_ids=model_inputs['token_type_ids'] if 'token_type_ids' in model_inputs else None
-        )
-        
-        logits = output.logits # batch, num_labels
-        pred = torch.argmax(logits.detach().cpu(), dim=-1)
-        label = model_inputs['labels'].detach().cpu().squeeze()
-        
+        output = self.model(**model_inputs, return_logit=True)
+        pred = torch.argmax(output['logit'].detach().cpu(), dim=-1)
+        label = labels.detach().cpu().squeeze()
 
         return pred.tolist(), label.tolist()

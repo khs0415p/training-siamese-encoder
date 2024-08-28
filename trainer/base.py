@@ -19,7 +19,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
 )
-from models import ClassificationModel
+from models import SiameseEncoder
 
 
 
@@ -60,7 +60,7 @@ class BaseTrainer:
     def _init_trainer(self):
         # initialize model
         self.init_model()
-
+        self.model.to(self.device)
         if self.config.mode == 'train':
             # initialize optimizer
             self.init_optimizer(use_exclude=self.config.use_exclude)
@@ -92,15 +92,13 @@ class BaseTrainer:
                 LOGGER.info(f"{'Batch Size':<25} {str(self.config.batch_size)}")
                 LOGGER.info(f"{'Learning Rate':<25} {str(self.config.lr)}")
 
-        self.model.to(self.device)
-
         torch.cuda.empty_cache()
         gc.collect()
 
 
     def init_model(self):
         
-        model = ClassificationModel(self.config)
+        model = SiameseEncoder(self.config)
         if self.config.continuous or self.config.mode == 'test':
             checkpoint_path = self.config.checkpoint
             try:
@@ -235,7 +233,7 @@ class BaseTrainer:
 
             if self.is_rank_zero:
                 self._save_learning_rate()
-                loss = self._training_step(model_inputs)
+                loss, classification_loss, cosine_loss, triplet_loss = self._training_step(model_inputs)
 
                 if self.config.save_strategy == "step":
                     if self.n_iter % self.config.save_step == 0 and self.is_rank_zero:
@@ -246,6 +244,9 @@ class BaseTrainer:
                     LOGGER.info(f"{'Step':<25}{str(step)}")
                     LOGGER.info(f"{'Phase':<25}Train")
                     LOGGER.info(f"{'Loss':<25}{str(loss)}")
+                    LOGGER.info(f"{'Cls Loss':<25}{str(classification_loss)}")
+                    LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
+                    LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
                     self.train_loss_history.append([step, loss])
 
             epoch_loss += loss * batch_size
@@ -278,7 +279,7 @@ class BaseTrainer:
             step = (epoch * len(self.dataloader['valid'])) + i
 
             if self.is_rank_zero:
-                loss, acc, logits = self._validation_step(model_inputs)
+                loss, classification_loss, cosine_loss, triplet_loss, logits = self._validation_step(model_inputs)
 
                 model_inputs['input_ids'] = model_inputs['input_ids'].detach().cpu()
                 logits = torch.argmax(logits.detach().cpu(), dim=-1)
@@ -288,6 +289,9 @@ class BaseTrainer:
                     LOGGER.info(f"{'Step':<25}{str(step)}")
                     LOGGER.info(f"{'Phase':<25}Validation")
                     LOGGER.info(f"{'Loss':<25}{str(loss)}")
+                    LOGGER.info(f"{'Cls Loss':<25}{str(classification_loss)}")
+                    LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
+                    LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
                     LOGGER.info(f"{'Accuracy':<25}{acc}")
                     self.valid_loss_history.append([step, loss])
 
