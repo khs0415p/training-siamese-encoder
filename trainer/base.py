@@ -40,6 +40,12 @@ class BaseTrainer:
 
         self.train_loss_history = []
         self.valid_loss_history = []
+        self.train_cls_history = []
+        self.valid_cls_history = []
+        self.train_cos_history = []
+        self.valid_cos_history = []
+        self.train_triplet_history = []
+        self.valid_triplet_history = []
         self.learning_rates = []
         self.best_val_loss = float("inf")
 
@@ -247,7 +253,10 @@ class BaseTrainer:
                     LOGGER.info(f"{'Cls Loss':<25}{str(classification_loss)}")
                     LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
                     LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
-                    self.train_loss_history.append([step, loss])
+                    self.train_loss_history.append([step, loss.detach().cpu()])
+                    self.train_cls_history.append([step, classification_loss.detach().cpu()])
+                    self.train_cos_history.append([step, cosine_loss.detach().cpu()])
+                    self.train_triplet_history.append([step, triplet_loss.detach().cpu()])
 
             epoch_loss += loss * batch_size
             total_size += batch_size
@@ -279,10 +288,9 @@ class BaseTrainer:
             step = (epoch * len(self.dataloader['valid'])) + i
 
             if self.is_rank_zero:
-                loss, classification_loss, cosine_loss, triplet_loss, logits = self._validation_step(model_inputs)
+                loss, classification_loss, cosine_loss, triplet_loss, acc = self._validation_step(model_inputs)
 
                 model_inputs['input_ids'] = model_inputs['input_ids'].detach().cpu()
-                logits = torch.argmax(logits.detach().cpu(), dim=-1)
 
                 if i % self.config.log_step == 0:
                     LOGGER.info(f"{'Epoch':<25}{str(epoch + 1)}")
@@ -293,7 +301,10 @@ class BaseTrainer:
                     LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
                     LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
                     LOGGER.info(f"{'Accuracy':<25}{acc}")
-                    self.valid_loss_history.append([step, loss])
+                    self.valid_loss_history.append([step, loss.detach().cpu()])
+                    self.valid_cls_history.append([step, classification_loss.detach().cpu()])
+                    self.valid_cos_history.append([step, cosine_loss.detach().cpu()])
+                    self.valid_triplet_history.append([step, triplet_loss.detach().cpu()])
 
             epoch_loss += loss * batch_size
             epoch_acc += acc * batch_size
@@ -398,7 +409,10 @@ class BaseTrainer:
             pickle.dump(self.valid_acc_history, f)
 
         if last_save:
-            save_loss_history(base_path, self.train_loss_history, self.valid_loss_history, step)
+            save_loss_history(base_path, self.train_loss_history, self.valid_loss_history, step, 'loss')
+            save_loss_history(base_path, self.train_cls_history, self.valid_cls_history, step, 'cls')
+            save_loss_history(base_path, self.train_cos_history, self.valid_cos_history, step, 'cos')
+            save_loss_history(base_path, self.train_triplet_history, self.valid_triplet_history, step, 'triplet')
 
         LOGGER.info(f"{'Saved model...'}")
 
