@@ -3,16 +3,15 @@ import torch.nn as nn
 
 from transformers import AutoModel
 
+
 class SiameseEncoder(nn.Module):
-    def __init__(self, encoder_dim=768, dropout=0.1, pooling='eos'):
+    def __init__(self, config):
         super().__init__()
-        # self.config = config
-        self.mean = pooling
-        self.encoder = AutoModel.from_pretrained('google-bert/bert-base-uncased', cache_dir='/data')
-        self.layer = nn.Linear(encoder_dim, 1)
-        self.dropout = nn.Dropout(dropout)
-        self.sigmoid = nn.Sigmoid()
-        self.pooling = pooling
+        self.config = config
+        self.mean = config.pooling
+        self.encoder = AutoModel.from_pretrained(config.model_path, cache_dir=config.cache_dir)
+        self.lm_head = nn.Linear(self.encoder.config.hidden_size * 3, self.config.num_labels)
+        self.pooling = config.pooling
 
     def _pooling(self, batched_tensor, attention_mask, pooling='mean'):
         lengths = attention_mask.sum(dim=-1)
@@ -32,15 +31,23 @@ class SiameseEncoder(nn.Module):
         
         return pooled_output
 
-    def forward(self, document1, document2):
-        output_1 = self.encoder(**document1)
-        output_2 = self.encoder(**document2)
+    def forward(self, premise, hypothesis, labels=None, return_logit=True):
+        output_1 = self.encoder(**premise)
+        output_2 = self.encoder(**hypothesis)
 
-        pooled_output_1 = self._pooling(output_1['last_hidden_state'], document1['attention_mask'], self.pooling)   # B, D
-        pooled_output_2 = self._pooling(output_2['last_hidden_state'], document2['attention_mask'], self.pooling)   # B, D
+        pooled_output_1 = self._pooling(output_1['last_hidden_state'], premise['attention_mask'], self.config.pooling)   # B, D
+        pooled_output_2 = self._pooling(output_2['last_hidden_state'], hypothesis['attention_mask'], self.config.pooling)   # B, D
 
-        output = self.layer((pooled_output_1 + pooled_output_2)) # B, 1
-        output = self.sigmoid(self.dropout(output))
+        output = torch.concat([pooled_output_1, pooled_output_2, (pooled_output_1 - pooled_output_2).abs()], dim=-1)
 
-        return output
+        if return_logit:
+            logit = self.lm_head(output)
 
+            return {
+                "pooled_outputs" : [pooled_output_1, pooled_output_2],
+                "logit": logit
+                }
+
+        return {
+            "pooled_outputs" : [pooled_output_1, pooled_output_2],
+        }

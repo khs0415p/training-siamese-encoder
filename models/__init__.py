@@ -1,1 +1,1 @@
-from .modeling import ClassificationModel
+from .modeling import SiameseEncoder
