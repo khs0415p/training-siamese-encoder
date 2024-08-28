@@ -253,10 +253,10 @@ class BaseTrainer:
                     LOGGER.info(f"{'Cls Loss':<25}{str(classification_loss)}")
                     LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
                     LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
-                    self.train_loss_history.append([step, loss.detach().cpu()])
-                    self.train_cls_history.append([step, classification_loss.detach().cpu()])
-                    self.train_cos_history.append([step, cosine_loss.detach().cpu()])
-                    self.train_triplet_history.append([step, triplet_loss.detach().cpu()])
+                    self.train_loss_history.append([step, loss])
+                    self.train_cls_history.append([step, classification_loss])
+                    self.train_cos_history.append([step, cosine_loss])
+                    self.train_triplet_history.append([step, triplet_loss])
 
             epoch_loss += loss * batch_size
             total_size += batch_size
@@ -301,10 +301,10 @@ class BaseTrainer:
                     LOGGER.info(f"{'Cos Loss':<25}{str(cosine_loss)}")
                     LOGGER.info(f"{'Triplet Loss':<25}{str(triplet_loss)}")
                     LOGGER.info(f"{'Accuracy':<25}{acc}")
-                    self.valid_loss_history.append([step, loss.detach().cpu()])
-                    self.valid_cls_history.append([step, classification_loss.detach().cpu()])
-                    self.valid_cos_history.append([step, cosine_loss.detach().cpu()])
-                    self.valid_triplet_history.append([step, triplet_loss.detach().cpu()])
+                    self.valid_loss_history.append([step, loss])
+                    self.valid_cls_history.append([step, classification_loss])
+                    self.valid_cos_history.append([step, cosine_loss])
+                    self.valid_triplet_history.append([step, triplet_loss])
 
             epoch_loss += loss * batch_size
             epoch_acc += acc * batch_size
