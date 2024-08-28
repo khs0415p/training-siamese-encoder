@@ -58,7 +58,7 @@ def get_losses(loss_history, step):
     return losses
 
 
-def save_loss_history(base_path, train_loss_history, valid_loss_history, step):
+def save_loss_history(base_path, train_loss_history, valid_loss_history, step, save_name='loss'):
     train_losses = get_losses(train_loss_history, step)
     valid_losses = get_losses(valid_loss_history, step)
 
@@ -72,4 +72,4 @@ def save_loss_history(base_path, train_loss_history, valid_loss_history, step):
 
     plt.xticks(range(1, step + 1))
     plt.legend()
-    plt.savefig(f"{base_path}/train_loss.png", bbox_inches='tight', dpi=300)
+    plt.savefig(f"{base_path}/train_{save_name}.png", bbox_inches='tight', dpi=300)
