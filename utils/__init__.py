@@ -7,7 +7,7 @@ import logging
 import matplotlib.pyplot as plt
 
 
-LOGGER_NAME = "Classification"
+LOGGER_NAME = "Siamese-Network"
 
 LOGGER = logging.getLogger(LOGGER_NAME)
 LOGGER.setLevel(logging.INFO)
