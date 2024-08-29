@@ -258,6 +258,9 @@ class BaseTrainer:
                     self.train_cos_history.append([step, cosine_loss])
                     self.train_triplet_history.append([step, triplet_loss])
 
+                    torch.cuda.empty_cache()
+                    gc.collect()
+
             epoch_loss += loss * batch_size
             total_size += batch_size
 
@@ -305,6 +308,9 @@ class BaseTrainer:
                     self.valid_cls_history.append([step, classification_loss])
                     self.valid_cos_history.append([step, cosine_loss])
                     self.valid_triplet_history.append([step, triplet_loss])
+
+                    torch.cuda.empty_cache()
+                    gc.collect()
 
             epoch_loss += loss * batch_size
             epoch_acc += acc * batch_size

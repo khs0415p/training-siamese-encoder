@@ -60,26 +60,14 @@ class Trainer(BaseTrainer):
             LOGGER.info("Not enough positive or negative samples found.")
             return None
         
-        anchor_embeddings = []
-        positive_embeddings = []
-        negative_embeddings = []
+        num_samples = min(len(positive_indices), len(negative_indices))
 
-        for i in range(len(positive_indices)):
-            anchor_idx = positive_indices[i]
+        positive_indices = positive_indices[torch.randperm(len(positive_indices))][:num_samples]
+        negative_indices = negative_indices[torch.randperm(len(negative_indices))][:num_samples]
 
-            anchor = premise[anchor_idx]
-            positive = hypothesis[anchor_idx]
-
-            negative_idx = negative_indices[i % len(negative_indices)]
-            negative = hypothesis[negative_idx]
-
-            anchor_embeddings.append(anchor)
-            positive_embeddings.append(positive)
-            negative_embeddings.append(negative)
-
-        anchors = torch.stack(anchor_embeddings)
-        positives = torch.stack(positive_embeddings)
-        negatives = torch.stack(negative_embeddings)
+        anchors = premise[positive_indices]
+        positives = hypothesis[positive_indices]
+        negatives = hypothesis[negative_indices]
 
         loss = self.triplet_loss(anchors, positives, negatives)
         return loss
