@@ -293,8 +293,6 @@ class BaseTrainer:
             if self.is_rank_zero:
                 loss, classification_loss, cosine_loss, triplet_loss, acc = self._validation_step(model_inputs)
 
-                model_inputs['input_ids'] = model_inputs['input_ids'].detach().cpu()
-
                 if i % self.config.log_step == 0:
                     LOGGER.info(f"{'Epoch':<25}{str(epoch + 1)}")
                     LOGGER.info(f"{'Step':<25}{str(step)}")
