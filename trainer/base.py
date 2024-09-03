@@ -385,7 +385,10 @@ class BaseTrainer:
         torch.save(self.scheduler.state_dict(), f'{base_path}/scheduler.pt')
 
         # Save model config
-        self.model.config.to_json_file(f'{base_path}/config.json')
+        try:
+            self.model.config.to_json_file(f'{base_path}/config.json')
+        except:
+            pass
 
         # Save tokenizer
         self.tokenizer.save_pretrained(f'{base_path}')
