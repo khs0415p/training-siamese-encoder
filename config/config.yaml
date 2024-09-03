@@ -5,7 +5,7 @@ ddp: false                      # for multi-gpu training
 
 model_path: roberta-base        # huggingface path
 tokenizer_path: roberta-base
-num_labels: 3
+num_labels: 2
 pooling: mean
 margin: 1.
 
@@ -26,7 +26,7 @@ use_exclude: false              # excluding bias and norm from weight decay
 save_total_limit: 50
 epochs: 10
 batch_size: 64
-lr: 2e-5
+lr: 1e-4
 gradient_accumulation_steps: 1.0
 clip_max_norm: 1.0
 

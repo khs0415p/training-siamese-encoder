@@ -44,14 +44,13 @@ class Trainer(BaseTrainer):
     
     def _make_target(self, labels):
         targets = torch.ones_like(labels.squeeze(), dtype=torch.float, device=labels.device)
-        targets[labels.squeeze() == 1] = 0
-        targets[labels.squeeze() == 2] = -1
+        targets[labels.squeeze() == 1] = -1
 
         return targets
     
     def _get_triplet_loss(self, premise, hypothesis, labels):
         positive_make = labels == 0
-        negative_make = labels == 2
+        negative_make = labels == 1
 
         positive_indices = positive_make.nonzero(as_tuple=True)[0]
         negative_indices = negative_make.nonzero(as_tuple=True)[0]
