@@ -38,16 +38,16 @@ class SiameseEncoder(nn.Module):
         pooled_output_1 = self._pooling(output_1['last_hidden_state'], premise['attention_mask'], self.config.pooling)   # B, D
         pooled_output_2 = self._pooling(output_2['last_hidden_state'], hypothesis['attention_mask'], self.config.pooling)   # B, D
 
-        output = torch.concat([pooled_output_1, pooled_output_2, (pooled_output_1 - pooled_output_2).abs()], dim=-1)
+        output = torch.cat([pooled_output_1, pooled_output_2, torch.abs(pooled_output_1 - pooled_output_2)], dim=-1)
 
         if return_logit:
             logit = self.lm_head(output)
 
             return {
-                "pooled_outputs" : [pooled_output_1, pooled_output_2],
+                "pooled_outputs" : (pooled_output_1, pooled_output_2),
                 "logit": logit
                 }
 
         return {
-            "pooled_outputs" : [pooled_output_1, pooled_output_2],
+            "pooled_outputs" : (pooled_output_1, pooled_output_2),
         }
