@@ -256,7 +256,8 @@ class BaseTrainer:
                     self.train_loss_history.append([step, loss])
                     self.train_cls_history.append([step, classification_loss])
                     self.train_cos_history.append([step, cosine_loss])
-                    self.train_triplet_history.append([step, triplet_loss])
+                    if triplet_loss is not None:
+                        self.train_triplet_history.append([step, triplet_loss])
 
                     torch.cuda.empty_cache()
                     gc.collect()
@@ -305,7 +306,8 @@ class BaseTrainer:
                     self.valid_loss_history.append([step, loss])
                     self.valid_cls_history.append([step, classification_loss])
                     self.valid_cos_history.append([step, cosine_loss])
-                    self.valid_triplet_history.append([step, triplet_loss])
+                    if triplet_loss is not None:
+                        self.valid_triplet_history.append([step, triplet_loss])
 
                     torch.cuda.empty_cache()
                     gc.collect()
