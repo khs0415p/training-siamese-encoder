@@ -63,7 +63,7 @@ def save_loss_history(base_path, train_loss_history, valid_loss_history, step, s
     valid_losses = get_losses(valid_loss_history, step)
 
     plt.figure(figsize=(step/2, 8))
-    plt.title(f"Training Loss History")
+    plt.title(f"Training {save_name.capitalize()} History")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
 
