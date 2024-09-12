@@ -49,11 +49,11 @@ class Trainer(BaseTrainer):
         return targets
     
     def _get_triplet_loss(self, premise, hypothesis, labels):
-        positive_make = labels == 0
-        negative_make = labels == 1
+        positive_mask = labels == 0
+        negative_mask = labels == 1
 
-        positive_indices = positive_make.nonzero(as_tuple=True)[0]
-        negative_indices = negative_make.nonzero(as_tuple=True)[0]
+        positive_indices = positive_mask.nonzero(as_tuple=True)[0]
+        negative_indices = negative_mask.nonzero(as_tuple=True)[0]
 
         if len(positive_indices) == 0 or len(negative_indices) == 0:
             LOGGER.info("Not enough positive or negative samples found.")
@@ -92,9 +92,11 @@ class Trainer(BaseTrainer):
         triplet_loss = self._get_triplet_loss(premise_output, hypothesis_output, labels)
 
         if triplet_loss is None:
-            loss = (classification_loss + cosine_loss) / 2
+            # loss = (classification_loss + cosine_loss) / 2
+            loss = (0.4 * classification_loss + 0.6 * cosine_loss)
         else:
-            loss = (classification_loss + cosine_loss + triplet_loss) / 3
+            # loss = (classification_loss + cosine_loss + triplet_loss) / 3
+            loss = (0.2 * classification_loss + 0.3 * cosine_loss + 0.5 * triplet_loss)
 
         self._backward_step(loss)
 
