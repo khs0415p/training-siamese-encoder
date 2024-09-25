@@ -10,7 +10,14 @@ class SiameseEncoder(nn.Module):
         self.config = config
         self.mean = config.pooling
         self.encoder = AutoModel.from_pretrained(config.model_path, cache_dir=config.cache_dir)
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.encoder.config.hidden_size, self.encoder.config.hidden_size),
+            nn.GELU(),
+            nn.Dropout(),
+        )
+        
         self.lm_head = nn.Linear(self.encoder.config.hidden_size * 3, self.config.num_labels)
+
         self.pooling = config.pooling
 
     def _pooling(self, batched_tensor, attention_mask, pooling='mean'):
@@ -38,10 +45,13 @@ class SiameseEncoder(nn.Module):
         pooled_output_1 = self._pooling(output_1['last_hidden_state'], premise['attention_mask'], self.config.pooling)   # B, D
         pooled_output_2 = self._pooling(output_2['last_hidden_state'], hypothesis['attention_mask'], self.config.pooling)   # B, D
 
-        output = torch.cat([pooled_output_1, pooled_output_2, torch.abs(pooled_output_1 - pooled_output_2)], dim=-1)
+        proj_1 = self.feature_proj(pooled_output_1)
+        proj_2 = self.feature_proj(pooled_output_2)
+
+        combined = torch.cat([proj_1, proj_2, torch.abs(proj_1 - proj_2)], dim=-1)
 
         if return_logit:
-            logit = self.lm_head(output)
+            logit = self.lm_head(combined)
 
             return {
                 "pooled_outputs" : (pooled_output_1, pooled_output_2),
